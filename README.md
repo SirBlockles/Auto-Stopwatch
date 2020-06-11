@@ -7,7 +7,7 @@ This plugin automatically manages tournament mode, locks team names and ready st
 
 Also includes "smart setup," a simple system I wrote which reduces setup time based on the presence of engineers or medics (or, more accurately, a lack thereof).
 
-#### NOTICE ABOUT TOURNAMENT MODE
+### NOTICE ABOUT TOURNAMENT MODE
 
 Since this enables tournament mode, this disables autobalance and team restrictions, and it is heavily recommended to get a third-party autobalancing/team limiting plugin! I will add a simple team restriction system later (ie preventing people from stacking on RED and creating a 3v8), however **I will NOT be writing an autobalance system into this plugin!**
 
@@ -15,7 +15,7 @@ Also, on that note, other tournament-exclusive options work with this plugin, in
 
 Thirdly, If you have the logs.tf plugin, halves played with this plugin *will* generate logs! If you don't want this, disable the logs.tf plugin.
 
-#### CVARs
+## CVARs
 
 Values in [brackets] are the default value.
 
