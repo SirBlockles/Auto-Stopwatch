@@ -33,9 +33,9 @@ and i wouldn't be able to change it anyway. Just don't use logs.tf concurrently 
 #include <sourcemod>
 #include <tf2_stocks>
 
-#define PLUGIN_VERSION "1.0"
+#define PLUGIN_VERSION "1.1"
 
-public Plugin:myinfo = {
+public Plugin myinfo = {
 	name = "Auto-Stopwatch",
 	author = "muddy",
 	description = "Automagically manages Stopwatch mode for pubs.",
@@ -43,19 +43,19 @@ public Plugin:myinfo = {
 	url = ""
 };
 
-new Handle:cvar_enabled;
-new Handle:cvar_halves;
-new Handle:cvar_firsthalfwaittime;
-new Handle:cvar_halfwaittime;
-new Handle:cvar_smartsetup;
-new Handle:cvar_smartsetupnoengy;
-new Handle:cvar_smartsetupnoeither;
-new Handle:cvar_fancycountdown;
-new downTime = false;
-new stopwatchCapable = false;
-new halfCount = 0;
+Handle cvar_enabled;
+Handle cvar_halves;
+Handle cvar_firsthalfwaittime;
+Handle cvar_halfwaittime;
+Handle cvar_smartsetup;
+Handle cvar_smartsetupnoengy;
+Handle cvar_smartsetupnoeither;
+Handle cvar_fancycountdown;
+bool downTime = false;
+bool stopwatchCapable = false;
+int halfCount = 0;
 
-public OnPluginStart() {
+public void OnPluginStart() {
 	cvar_enabled = CreateConVar("sm_stopwatch_enabled", "1", "Enables stopwatch management.", FCVAR_ARCHIVE, true, 0.0, true, 1.0);
 	cvar_halves = CreateConVar("sm_stopwatch_halves", "2", "How many halves (1 round offense, 1 round defense) should be played per map?", FCVAR_NOTIFY, true, 1.0, true, 12.0);
 	cvar_firsthalfwaittime = CreateConVar("sm_stopwatch_halves_firstwaittime", "40", "How many seconds to wait after first player spawns on first half (for map downloaders)", FCVAR_ARCHIVE, true, 10.0, true, 60.0);
@@ -71,14 +71,14 @@ public OnPluginStart() {
 	RegConsoleCmd("tournament_teamname", cmd_block);
 }
 
-public OnMapStart() {
+public void OnMapStart() {
 	halfCount = 0; //reset tracked halves to zero on a new map
 	stopwatchCapable = false;
 	if (!GetConVarBool(cvar_enabled)) return; //halt everything if the plugin CVAR is not enabled
-	new iTeam, iEnt = 0;
+	int iTeam, iEnt = 0;
 	
 	//check if the map is stopwatch-capable: 
-	if(FindEntityByClassname(-1, "func_tracktrain") > -1 && FindEntityByClassname(-1, "tf_multiple_escort") == -1) stopwatchCapable = true; //from what i can tell, there's not actually a proper "tf_logic_escort," so check if there's a tracktrain (payload cart) and NOT payload race
+	if(GameRules_GetProp("m_nGameType") == 3 && FindEntityByClassname(-1, "tf_multiple_escort") == -1) { stopwatchCapable = true;}
 	if(!stopwatchCapable) { //if the payload check hasn't passed, give it a go with control point checks		
 		while(FindEntityByClassname(iEnt, "team_control_point") != -1) { //check all points on a map, and see if RED owns all of them, as Attack/Defend is likely to be
 			iTeam = GetEntProp(iEnt, Prop_Send, "m_iTeamNum");
@@ -87,15 +87,14 @@ public OnMapStart() {
 			iEnt++;
 		}
 	}
-	if(FindEntityByClassname(-1, "tf_logic_koth") > -1) stopwatchCapable = false; //if we're in koth, it doesn't matter what conclusion our stopwatch check came to. useful for some koth maps that somehow trick our above logic.
 }
 
-public OnMapEnd() {
+public void OnMapEnd() {
 	if (!GetConVarBool(cvar_enabled)) return; //in case the server is using a competitive config and changes map, we don't want to turn off tournament mode on them!
 	SetConVarBool(FindConVar("mp_tournament"), false); //disable mp_tournament on map end to reset it for the next map load.
 }
 
-public round_start(Handle:event, const String:name[], bool:dontBroadcast) {
+public void round_start(Handle event, const char[] name, bool dontBroadcast) {
 	if (!GetConVarBool(cvar_enabled) || !stopwatchCapable) return;
 	downTime = false;
 	// set team names to RED and BLU each round to prevent RED being named BLU and vice versa
@@ -125,7 +124,7 @@ public round_start(Handle:event, const String:name[], bool:dontBroadcast) {
 		//this last bit does voicelines and music, a la valve casual mode, and *should* remain accurate even when thrown custom countdown times
 		if(GetConVarBool(cvar_fancycountdown)) { //ignore this entire bit if the fancy countdown is disabled
 			if(GetConVarInt(cvar_firsthalfwaittime) == 60) { //only announce 60 second line if there are 60 seconds... duh
-				for(new i = 1; i <= MaxClients; i++) { 
+				for(int i = 1; i <= MaxClients; i++) { 
 					if(!IsClientInGame(i)) continue;
 					ClientCommand(i, "playgamesound Announcer.CompGame1Begins60Seconds"); //playgamesound is a built-in command that plays one of the possible variations automatically, without having to hard-code playing sounds directly. it's the future!
 				}
@@ -139,7 +138,7 @@ public round_start(Handle:event, const String:name[], bool:dontBroadcast) {
 	
 	//"Smart Setup" logic. Reduces time in Setup phase if no medics or engineers are present after the first 6 seconds of Setup time starting.
 	if(GetConVarInt(cvar_smartsetup) != 0 && !downTime) {
-		new roundTimer = FindEntityByClassname(-1, "team_round_timer");
+		int roundTimer = FindEntityByClassname(-1, "team_round_timer");
 		if (roundTimer > -1)
 		{
 			CreateTimer(6.0, AttemptSmartSetup, roundTimer); //wait 6 seconds into the round to account for class changes
@@ -149,7 +148,7 @@ public round_start(Handle:event, const String:name[], bool:dontBroadcast) {
 	}
 }
 
-public game_end(Handle:event, const String:name[], bool:dontBroadcast) {
+public void game_end(Handle event, const char[] name, bool dontBroadcast) {
 	if (!GetConVarBool(cvar_enabled)) return;
 	halfCount++; //we just finished a half, increment this from zero each time the match ends
 	if(halfCount >= GetConVarInt(cvar_halves)) { //we've now hit the defined half limit, or it was lowered by an admin during the course of the last half
@@ -159,7 +158,7 @@ public game_end(Handle:event, const String:name[], bool:dontBroadcast) {
 		PrintToChatAll("[Stopwatch] Reached half %i/%i. New half begins in %i seconds...", halfCount, GetConVarInt(cvar_halves), GetConVarInt(cvar_halfwaittime));
 		if(GetConVarInt(cvar_fancycountdown)) {
 			if(GetConVarInt(cvar_halfwaittime) == 60) {
-				for(new i = 1; i <= MaxClients; i++) {
+				for(int i = 1; i <= MaxClients; i++) {
 					if(!IsClientInGame(i)) continue;
 					ClientCommand(i, "playgamesound Announcer.CompGame1Begins60Seconds");
 				}
@@ -173,11 +172,11 @@ public game_end(Handle:event, const String:name[], bool:dontBroadcast) {
 	}
 }
 
-public Action AttemptSmartSetup(Handle timer, entityTimer) {
-	new bool:leastOneEngy = false;
-	new bool:leastOneMedic = false;
+public Action AttemptSmartSetup(Handle timer, int entityTimer) {
+	bool leastOneEngy = false;
+	bool leastOneMedic = false;
 	
-	for(new i = 1; i <= MaxClients; i++) {
+	for(int i = 1; i <= MaxClients; i++) {
 		if(!IsClientInGame(i)) continue;
 		if(TF2_GetPlayerClass(i) == TFClass_Engineer) { leastOneEngy = true; break; } //if there's at least one engy, end the loop since we're not reducing setup at all and there's no point in checking further
 		if(TF2_GetPlayerClass(i) == TFClass_Medic) { leastOneMedic = true; } //don't break here in case there's still an engineer we haven't found yet
@@ -196,7 +195,7 @@ public Action AttemptSmartSetup(Handle timer, entityTimer) {
 
 //same logic as the "begins in 60 seconds" voice lines, just thrown off into a function because timers
 public Action Speak30Sec(Handle timer) {
-	for(new i = 1; i <= MaxClients; i++) {
+	for(int i = 1; i <= MaxClients; i++) {
 		if(!IsClientInGame(i)) { continue; }
 		ClientCommand(i, "playgamesound Announcer.CompGame1Begins30Seconds");
 	}
@@ -204,15 +203,12 @@ public Action Speak30Sec(Handle timer) {
 
 //mp_restartgame automatically does "mission begins in 10..." and below, so instead of playing a fancy casual mode line, play the music from a casual match starting to compliment the default voicelines.
 public Action PlayPregameMusic(Handle timer) {
-	for(new i = 1; i <= MaxClients; i++) {
+	for(int i = 1; i <= MaxClients; i++) {
 		if(!IsClientInGame(i)) { continue; }
 		ClientCommand(i, "playgamesound MatchMaking.RoundStartCasual");
 	}
 }
 
-//this is one of the only remaining remnants of the old auto-stopwatch plugin that this one was derived from.
-//i don't know shit about bitwise logic, but tweaking this, i've made it so if the map is determined to not be stopwatch capable, it shouldn't block mp_tournament commands,
-//so you can at least ready up on koth if this plugin is still active. i dunno.
-public Action cmd_block(client, args) {
+public Action cmd_block(int client, int args) {
 	return (stopwatchCapable ? Plugin_Handled : Plugin_Continue);
 }
