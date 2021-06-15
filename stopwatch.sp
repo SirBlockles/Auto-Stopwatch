@@ -10,21 +10,7 @@ Also includes "smart setup," which reduces setup time based on the presence of e
 CHANGELOG
 1.0 - initial release
 1.1 - improve gametype detection logic, reformat code to newdecls
-1.2 - no longer soft-locks map if all players leave teams
-
-TO-DO LIST:
-
-* If the pre-game countdown is initiated, and all players leave their teams, the countdown is cancelled and never restarted, soft-locking the map on the ready-up screen.
-Possible solutions:
-  1) Watch every round start event, and check if there are any players on either team.
-  2) Watch every team change event, and check if there are any players on either team.
-  
-  In either case, once we determine there's no players on a team, turn off tournament mode to reset the round state, and await a player joining a team as usual.
-  We'll also have to make sure that halves are still tracked accurately when resetting the round state - does it assume everyone left and reset to no halves played,
-  or do we assume that maybe people just went into spectator and we should stil save that we've already played a half?
-  If people go into spectator and back, they can delay a map and play it forever if we reset it,
-  but it would only take one person staying on a team to progress to a new half, so it would have to be a unanimous decision among the players to stall the map.
-
+1.2 - players cannot imbalance teams by abusing tournament mode. AUTOBALANCE DOES NOT WORK, GET AN AUTOBALANCER WHEN USING THIS!
 */
 
 #pragma semicolon 1
@@ -66,24 +52,30 @@ public void OnPluginStart() {
 	HookEvent("teamplay_round_start", round_start);
 	HookEvent("tf_game_over", game_end);
 	HookEvent("teamplay_game_over", game_end);
-	RegConsoleCmd("tournament_readystate", cmd_block);
-	RegConsoleCmd("tournament_teamname", cmd_block);
+	HookEvent("player_team", change_team, EventHookMode_Pre);
+	AddCommandListener(cmd_block, "tournament_readystate");
+	AddCommandListener(cmd_block, "tournament_teamname");
+	AddCommandListener(cmd_teamSwap, "jointeam");
 }
 
 public void OnMapStart() {
 	halfCount = 0; //reset tracked halves to zero on a new map
 	stopwatchCapable = false;
 	if (!GetConVarBool(cvar_enabled)) return; //halt everything if the plugin CVAR is not enabled
-	int iTeam, iEnt = 0;
+	int iTeam, iEnt = -1;
+	int loop = 0;
 	
 	//check if the map is stopwatch-capable: 
 	if(GameRules_GetProp("m_nGameType") == 3 && FindEntityByClassname(-1, "tf_multiple_escort") == -1) { stopwatchCapable = true;}
-	if(!stopwatchCapable) { //if the payload check hasn't passed, give it a go with control point checks		
-		while(FindEntityByClassname(iEnt, "team_control_point") != -1) { //check all points on a map, and see if RED owns all of them, as Attack/Defend is likely to be
+	else { //if the payload check hasn't passed, give it a go with control point checks
+		//we have to use a loop counter otherwise it'll try to use ent -1 once it's found all control points. lame but it works
+		while((iEnt = FindEntityByClassname(iEnt, "team_control_point")) && !(iEnt == -1 && loop != 0)) { //check all points on a map, and see if RED owns all of them, as Attack/Defend is likely to be
+			//if(iEnt == -1 && loop != 0) { break; }
 			iTeam = GetEntProp(iEnt, Prop_Send, "m_iTeamNum");
 			if(iTeam != 2) { stopwatchCapable = false; break; } //any mode with BLU or neutral caps on map start is likely 5CP or some other weird mode from mars
-			else stopwatchCapable = true; //if any point doesn't belong to RED we won't reach this line - if we finish all points then the map is stopwatch capable.
+			else { stopwatchCapable = true; } //if any point doesn't belong to RED we won't reach this line - if we finish all points then the map is stopwatch capable.
 			iEnt++;
+			loop++;
 		}
 	}
 }
@@ -135,6 +127,9 @@ public void round_start(Handle event, const char[] name, bool dontBroadcast) {
 		}
 	}
 	
+	//if we set maxrounds to double our halves, we'll play that many rounds throughout.
+	//afterwards, reduce it to 2. This *should* be enough to fool mapchooser so it doesn't call a mapvote after a single round lol
+	
 	//"Smart Setup" logic. Reduces time in Setup phase if no medics or engineers are present after the first 6 seconds of Setup time starting.
 	if(GetConVarInt(cvar_smartsetup) != 0 && !downTime) {
 		int roundTimer = FindEntityByClassname(-1, "team_round_timer");
@@ -142,7 +137,7 @@ public void round_start(Handle event, const char[] name, bool dontBroadcast) {
 		{
 			CreateTimer(6.0, AttemptSmartSetup, roundTimer); //wait 6 seconds into the round to account for class changes
 		} else { //if we somehow don't have a round timer, take note of it. This plugin should automatically detect that we're not on a stopwatch map, and reaching this point means the map confused the plugin.
-			PrintToChatAll("[Stopwatch] Could not find round timer! Are you playing on a map without one?");
+			PrintToChatAll("[Stopwatch] This map seems like it should be stopwatch-capable, yet there's no round timer. This map confused the plugin!");
 		}
 	}
 }
@@ -158,7 +153,7 @@ public void game_end(Handle event, const char[] name, bool dontBroadcast) {
 		if(GetConVarInt(cvar_fancycountdown)) {
 			if(GetConVarInt(cvar_halfwaittime) == 60) {
 				for(int i = 1; i <= MaxClients; i++) {
-					if(!IsClientInGame(i)) continue;
+					if(!IsClientInGame(i)) { continue; }
 					ClientCommand(i, "playgamesound Announcer.CompGame1Begins60Seconds");
 				}
 			}
@@ -169,6 +164,67 @@ public void game_end(Handle event, const char[] name, bool dontBroadcast) {
 		ServerCommand("mp_restartgame %i", GetConVarInt(cvar_halfwaittime));
 		downTime = true;
 	}
+}
+
+public Action change_team(Handle event, const char[] name, bool dontBroadcast) {
+	int ply = GetClientOfUserId(GetEventInt(event, "userid"));
+	int team = GetEventInt(event, "team");
+	
+	if(team >= 2) { return Plugin_Continue; } //being assigned to red or blu means we have at least one active player... no further checks needed
+	
+	bool teamsEmpty = true;
+	for(int i = 1; i <= MaxClients; i++) {
+		if(!IsClientInGame(i) || i == ply) { continue; }
+		if(GetClientTeam(i) >= 2) {
+			teamsEmpty = false;
+		}
+	}
+	
+	if(teamsEmpty) { SetConVarInt(FindConVar("mp_tournament"), 0); }
+	return Plugin_Continue;
+}
+
+/*
+	manual override of jointeam command. since stopwatch uses tournament mode,
+	teams are unlocked regardless of mp_teams_unbalance_limit since you're supposed
+	to organize your team in pregame. so we add manual checks to make sure players
+	aren't just swapping teams and imbalancing them.
+	This doesn't autobalance when someone leaves and imbalances, though.
+*/
+public Action cmd_teamSwap(int ply, const char[] command, int args) {
+	int bluCt = 0;
+	int redCt = 0;
+	for(int i = 1; i <= MaxClients; i++) {
+		if(!IsClientInGame(i)) { continue; }
+		if(TF2_GetClientTeam(i) == TFTeam_Red) { redCt += 1; }
+		else if(TF2_GetClientTeam(i) == TFTeam_Blue) { bluCt += 1; }
+	}
+	
+	char cmdStr[12];
+	GetCmdArgString(cmdStr, sizeof(cmdStr));
+	
+	if(TF2_GetClientTeam(ply) == TFTeam_Red && !StrEqual(cmdStr, "spectate")) { //attempting to join BLU
+		if(redCt - bluCt <= 0) {
+			return Plugin_Handled;
+		}
+	} else if(TF2_GetClientTeam(ply) == TFTeam_Blue && !StrEqual(cmdStr, "spectate")) { //attempting to join red
+		if(bluCt - redCt <= 0) {
+			return Plugin_Handled;
+		}
+	} else if(TF2_GetClientTeam(ply) == TFTeam_Spectator) { //attempting to join from spec
+		if(StrEqual(cmdStr, "red")) {
+			if(bluCt - redCt < 0) {
+				return Plugin_Handled;
+			}
+		} else if(StrEqual(cmdStr, "blue")) {
+			if(redCt - bluCt < 0) {
+				return Plugin_Handled;
+			}
+		} else if(!StrEqual(cmdStr, "auto")){
+			return Plugin_Handled;
+		}
+	}
+	return Plugin_Continue;
 }
 
 public Action AttemptSmartSetup(Handle timer, int entityTimer) {
@@ -208,6 +264,6 @@ public Action PlayPregameMusic(Handle timer) {
 	}
 }
 
-public Action cmd_block(int client, int args) {
+public Action cmd_block(int client, const char[] command, int args) {
 	return (stopwatchCapable ? Plugin_Handled : Plugin_Continue);
 }
