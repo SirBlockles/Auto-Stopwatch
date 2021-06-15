@@ -9,9 +9,9 @@ Also includes "smart setup," a simple system I wrote which reduces setup time ba
 
 ### NOTICE ABOUT TOURNAMENT MODE
 
-Since this enables tournament mode, this disables autobalance and team restrictions, and it is heavily recommended to get a third-party autobalancing/team limiting plugin! I will add a simple team restriction system later (ie preventing people from stacking on RED and creating a 3v8), however **I will NOT be writing an autobalance system into this plugin!**
+This plugin enables Tournament mode, which disables team balancing. This plugin has a from-scratch system to prevent players from _joining teams to cause an imbalance._ This means a player can't swap teams to change a 2v2 to a 1v3. **THIS DOES NOT INCLUDE AN AUTOBALANCER!** If players leave the game and wind up with 5v2, the plugin will not auto-swap someone to the other team, get a 3rd party autobalancer!
 
-Also, on that note, other tournament-exclusive options work with this plugin, including the built-in class restriction system (`tf_tournament_classlimit_<class>`), and players who are dead/spectating will be able to use the tournament spectator HUD.
+Also, on that note, other tournament-exclusive options work with this plugin, including the built-in per-class restriction system (`tf_tournament_classlimit_<class>`), and players who are dead/spectating will be able to use the tournament spectator HUD.
 
 Thirdly, If you have the logs.tf plugin, halves played with this plugin *will* generate logs! If you don't want this, disable the logs.tf plugin.
 
