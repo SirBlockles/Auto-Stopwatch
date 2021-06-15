@@ -9,6 +9,8 @@ Also includes "smart setup," which reduces setup time based on the presence of e
 
 CHANGELOG
 1.0 - initial release
+1.1 - improve gametype detection logic, reformat code to newdecls
+1.2 - no longer soft-locks map if all players leave teams
 
 TO-DO LIST:
 
@@ -22,9 +24,6 @@ Possible solutions:
   or do we assume that maybe people just went into spectator and we should stil save that we've already played a half?
   If people go into spectator and back, they can delay a map and play it forever if we reset it,
   but it would only take one person staying on a team to progress to a new half, so it would have to be a unanimous decision among the players to stall the map.
-  
-* Logs still generate if the logs.tf plugin is installed, since each half is a fully-qualified competitive game. May or may not be a bug depending on your philosophy,
-and i wouldn't be able to change it anyway. Just don't use logs.tf concurrently with this plugin.
 
 */
 
@@ -33,7 +32,7 @@ and i wouldn't be able to change it anyway. Just don't use logs.tf concurrently 
 #include <sourcemod>
 #include <tf2_stocks>
 
-#define PLUGIN_VERSION "1.1"
+#define PLUGIN_VERSION "1.2"
 
 public Plugin myinfo = {
 	name = "Auto-Stopwatch",
